@@ -58,7 +58,7 @@ public:
 		input.mi.time = 0;
 		SendInput(1, &input, sizeof(INPUT));
 	}
-	void PressKey(int key = 0x75, double waitTime = 0, double waitRadius =0)
+	void PressKey(int key = 0x75, double waitTime = 0, double waitRadius = 0)
 	{
 		// Calculate wait Time inbetween key down and key up
 		double sleepDuration = BellRand(waitTime, waitRadius);
@@ -87,88 +87,73 @@ public:
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
 		double elapsedTime = 0;
-		int bucket;
+		int numPoints = Storage.size();
+		int bucket = (double)numPoints*elapsedTime;
 		double numPoints = Storage.size();
-		while (elapsedTime<1)
+		while (bucket < numPoints)
 		{
+			// Apply the current bucket's action
+			SetCursorPos(Storage[bucket].x, Storage[bucket].y);
+			// Prepare for next
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
 			//select the proper bucket for smooth movement
 			bucket = (double)numPoints*elapsedTime;
-			if (bucket >= numPoints)
-			{
-				bucket = numPoints - 1;
-			}
-			SetCursorPos(Storage[bucket].x, Storage[bucket].y);
 		}
 	}
 	void PlayCurrentBetweenPoints(Point begin, Point end, double time_to_move)
 	{
-			//First scale -> rotate -> translate such that you cover the wanted path
-			//Scale:
-			Point dirVec(end.x - begin.x, end.y - begin.y);
-			double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
-			double scaleFactor = displacement / (double)DISTLENGTH;
-			int numPoints = Storage.size();
-			for (int cnt = 0; cnt<numPoints; cnt++)
-			{
-				Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
-			}
-			//Rotate:
-			double theta = atan2(dirVec.y, dirVec.x);
-			for (int cnt = 0; cnt<numPoints; cnt++)
-			{
-				Storage[cnt] = vecmatmult(matrot(theta), Storage[cnt]);
-			}
-			// Translate:
-			for (int cnt = 0; cnt<numPoints; cnt++)
-			{
-				Storage[cnt].x += begin.x;
-				Storage[cnt].y += begin.y;
-			}
-			//PlayMouseMovement(time_to_move);
-			/////////////////////////////////////////////////////////////////////////
-			SYSTEMTIME start_time;
-			GetSystemTime(&start_time);
-			SYSTEMTIME now_time;
-			double elapsedTime = 0;
-			int bucket;
-			double largenum;
-			while (elapsedTime<1)
-			{
-				GetSystemTime(&now_time);
-				elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
-				//select the proper bucket for smooth movement
-
-				largenum = (double)numPoints*elapsedTime;
-				if (largenum > INT_MAX)
-				{
-					bucket = numPoints - 1;
-				}
-				else
-				{
-					bucket = largenum;
-				}
-
-
-				if (bucket >= numPoints)
-				{
-					bucket = numPoints - 1;
-				}
-				SetCursorPos(Storage[bucket].x, Storage[bucket].y);
-			}
-			ToStorageForm();
+		//First scale -> rotate -> translate such that you cover the wanted path
+		//Scale:
+		Point dirVec(end.x - begin.x, end.y - begin.y);
+		double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
+		double scaleFactor = displacement / (double)DISTLENGTH;
+		int numPoints = Storage.size();
+		for (int cnt = 0; cnt < numPoints; cnt++)
+		{
+			Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
 		}
-	void Record(double time_to_move)
+		//Rotate:
+		double theta = atan2(dirVec.y, dirVec.x);
+		for (int cnt = 0; cnt < numPoints; cnt++)
+		{
+			Storage[cnt] = vecmatmult(matrot(theta), Storage[cnt]);
+		}
+		// Translate:
+		for (int cnt = 0; cnt < numPoints; cnt++)
+		{
+			Storage[cnt].x += begin.x;
+			Storage[cnt].y += begin.y;
+		}
+		//PlayMouseMovement(time_to_move);
+		/////////////////////////////////////////////////////////////////////////
+		SYSTEMTIME start_time;
+		GetSystemTime(&start_time);
+		SYSTEMTIME now_time;
+		double elapsedTime = 0;
+		int bucket = (double)numPoints*elapsedTime;
+		while (bucket < numPoints)
+		{
+			// Apply the current bucket's action
+			SetCursorPos(Storage[bucket].x, Storage[bucket].y);
+			// Prepare for next
+			GetSystemTime(&now_time);
+			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
+			//select the proper bucket for smooth movement
+			bucket = (double)numPoints*elapsedTime;
+		}
+		ToStorageForm();
+	}
+	void Record(double time_to_move, int resolutionpps)
 	{
 		// This algorithm works by filling a large vector of Points
 		// according to the time elapsed, then filling the the gaps by 
 		// linear interpolation
 
-
+		ClearStorage();
 
 		//Allocate enough Storage that the vector to have the correct resolution
-		int sizeToUse = pointspersecond * time_to_move;
+		int sizeToUse = resolutionpps * time_to_move;
 		Storage.reserve(sizeToUse);
 		while (Storage.size() < sizeToUse)
 		{
@@ -182,21 +167,18 @@ public:
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
 		double elapsedTime = 0;
-		while (elapsedTime<1.0)
+		// This structure guarantees that Storage[0] is nonempty
+		// and we never attempt to put something out of range
+		int bucket = (int)numPoints*elapsedTime;
+		while (bucket < numPoints)
 		{
+			// Put something in the bucket
+			GetCursorPos(curserposinit);
+			Storage[bucket] = Point(curserposinit->x, curserposinit->y);
+			//Calculate next bucket
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
-			GetCursorPos(curserposinit);
-			int bucket = (int)numPoints*elapsedTime;
-			if (bucket < numPoints)
-			{
-				Storage[bucket] = Point(curserposinit->x, curserposinit->y);
-			}
-			else
-			{
-				Storage[numPoints -1 ] = Point(curserposinit->x, curserposinit->y);
-			}
-			
+			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
 		cleanMM();
@@ -207,25 +189,33 @@ public:
 		// first translate all points to origin
 		Point first(Storage[0].x, Storage[0].y);
 		int numPoints = Storage.size();
-		for (int cnt = 0; cnt<numPoints; cnt++)
+		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
 			Storage[cnt].x -= first.x;
 			Storage[cnt].y -= first.y;
 		}
 		//find the angle between the ending points and set it equal to zero.
 		double theta = atan2((Storage[numPoints - 1].y), (Storage[numPoints - 1].x));
-		for (int cnt = 0; cnt<numPoints; cnt++)
+		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
 			Storage[cnt] = vecmatmult(matrot(-theta), Storage[cnt]);
 		}
 		//finally, scale the length to a predetermined amount
 		double scaleFactor = (double)DISTLENGTH / (Storage[numPoints - 1].x);
-		for (int cnt = 0; cnt<numPoints; cnt++)
+		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
 			Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
 		}
 	}
 private:
+	void ClearStorage()
+	{
+		for (auto &i : Storage)
+		{
+			i.x = -1;
+			i.y = -1;
+		}
+	}
 	void cleanMM()
 	{
 		//Here we want to take our array of mouse positions and interpolate between measurements
@@ -235,9 +225,9 @@ private:
 		int lastUnfilled = 0;
 		int totUnfilled = 0;
 		int numPoints = Storage.size();
-		if (Storage[0].x <0 && Storage[0].y <0)
+		if (Storage[0].x < 0 && Storage[0].y < 0)
 		{
-			for (int k = 1; k<numPoints - 1; k++)
+			for (int k = 1; k < numPoints - 1; k++)
 			{
 				if (Storage[k].x >= 0 && Storage[k].y >= 0)
 				{
@@ -247,15 +237,15 @@ private:
 				}
 			}
 		}
-		for (int cnt = 0; cnt<numPoints- 1; cnt++)
+		for (int cnt = 0; cnt < numPoints - 1; cnt++)
 		{
-			if (Storage[cnt].x<0 && Storage[cnt].y<0)
+			if (Storage[cnt].x < 0 && Storage[cnt].y < 0)
 			{
 				firstUnfilled = cnt;
 				lastUnfilled = cnt;
 				Previous.x = Storage[cnt - 1].x;
 				Previous.y = Storage[cnt - 1].y;
-				for (cnt = cnt + 1; Storage[cnt].x<0 && Storage[cnt].y<0; cnt++)
+				for (cnt = cnt + 1; Storage[cnt].x < 0 && Storage[cnt].y < 0; cnt++)
 				{
 					lastUnfilled++;
 				}
@@ -270,7 +260,7 @@ private:
 				//now loop through unfilled buckets, interpolating the values
 				double divider = lastUnfilled - firstUnfilled + 2; // if we have 3,5, we need to divide the gap into 4 spaces
 				Point dirVec = Point(Current.x - Previous.x, Current.y - Previous.y);
-				for (int p = 0; p<divider - 1; p++)
+				for (int p = 0; p < divider - 1; p++)
 				{
 					Storage[p + firstUnfilled].x = dirVec.x*((p + 1) / divider) + Previous.x;
 					Storage[p + firstUnfilled].y = dirVec.y*((p + 1) / divider) + Previous.y;
@@ -282,7 +272,7 @@ private:
 		}
 		//if the last value is garbage, we need to put a value there
 		// and loop back through the array in order to fill things.
-		if (Storage[numPoints - 1].x<0 && Storage[numPoints - 1].y<0)
+		if (Storage[numPoints - 1].x < 0 && Storage[numPoints - 1].y < 0)
 		{
 			Storage[numPoints - 1].x = Previous.x;
 			Storage[numPoints - 1].y = Previous.y;
@@ -305,8 +295,7 @@ private:
 	}
 	// Turn Storage into the valid storage form (goes from (0,0) to (500,0))
 
-	// Resolution
-	int pointspersecond = 1000;
+
 	// Holds all the structs.
 	std::vector<Point> Storage;
 };
