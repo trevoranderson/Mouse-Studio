@@ -110,6 +110,7 @@ inline double dif_frac_seconds(SYSTEMTIME A, SYSTEMTIME B)
 	double ret= (A.wHour-B.wHour)*3600 + (A.wMinute-B.wMinute)*60 + A.wSecond-B.wSecond + (double)(A.wMilliseconds-B.wMilliseconds)/1000;
 	return ret;
 }
+
 void smoothmove(MMCoord start, MMCoord end, double time_to_move)
 {
 	if(start.x==end.x && start.y==end.y)
