@@ -44,19 +44,44 @@ public:
 			SetCursorPos(start.x + time_percent*(parametricvector.x), start.y + time_percent*(parametricvector.y));
 		}
 	}
-	void Click()
+	void Click(double waitTime = 0, double waitRadius = 0)
 	{
-		POINT * curserpos = new POINT();
-		GetCursorPos(curserpos);
-		INPUT input;
-		input.type = INPUT_MOUSE;
-		input.mi.dx = curserpos->x;
-		input.mi.dy = curserpos->y;
-		input.mi.dwFlags = (MOUSEEVENTF_ABSOLUTE |/*MOUSEEVENTF_MOVE|*/MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP);
-		input.mi.mouseData = 0;
-		input.mi.dwExtraInfo = NULL;
-		input.mi.time = 0;
-		SendInput(1, &input, sizeof(INPUT));
+		if (waitTime == 0 && waitRadius == 0)
+		{
+			POINT * curserpos = new POINT();
+			GetCursorPos(curserpos);
+			INPUT input;
+			input.type = INPUT_MOUSE;
+			input.mi.dx = curserpos->x;
+			input.mi.dy = curserpos->y;
+			input.mi.dwFlags = (MOUSEEVENTF_ABSOLUTE |/*MOUSEEVENTF_MOVE|*/MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP);
+			input.mi.mouseData = 0;
+			input.mi.dwExtraInfo = NULL;
+			input.mi.time = 0;
+			SendInput(1, &input, sizeof(INPUT));
+		}
+		else
+		{
+			//Calculate sleep time
+			double sleepDuration = BellRand(waitTime, waitRadius);
+
+			POINT * curserpos = new POINT();
+			GetCursorPos(curserpos);
+			INPUT input;
+			input.type = INPUT_MOUSE;
+			input.mi.dx = curserpos->x;
+			input.mi.dy = curserpos->y;
+			input.mi.dwFlags = (MOUSEEVENTF_ABSOLUTE |/*MOUSEEVENTF_MOVE|*/MOUSEEVENTF_LEFTDOWN);
+			input.mi.mouseData = 0;
+			input.mi.dwExtraInfo = NULL;
+			input.mi.time = 0;
+			SendInput(1, &input, sizeof(INPUT));
+
+			//wait
+			Sleep(sleepDuration);
+			input.mi.dwFlags = (MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_LEFTUP);
+			SendInput(1, &input, sizeof(INPUT));
+		}
 	}
 	void PressKey(int key = 0x75, double waitTime = 0, double waitRadius = 0)
 	{
@@ -88,8 +113,7 @@ public:
 		SYSTEMTIME now_time;
 		double elapsedTime = 0;
 		int numPoints = Storage.size();
-		int bucket = (double)numPoints*elapsedTime;
-		double numPoints = Storage.size();
+		int bucket = 0;
 		while (bucket < numPoints)
 		{
 			// Apply the current bucket's action
@@ -103,27 +127,29 @@ public:
 	}
 	void PlayCurrentBetweenPoints(Point begin, Point end, double time_to_move)
 	{
-		//First scale -> rotate -> translate such that you cover the wanted path
+		// Since we are doing transformations, build a tmp storage vector from the old
+		std::vector<Point> toPlay = Storage;
+		//scale -> rotate -> translate such that you cover the wanted path
 		//Scale:
 		Point dirVec(end.x - begin.x, end.y - begin.y);
 		double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
-		double scaleFactor = displacement / (double)DISTLENGTH;
-		int numPoints = Storage.size();
+		double scaleFactor = 1.0;
+		int numPoints = toPlay.size();
 		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
-			Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
+			toPlay[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), toPlay[cnt]);
 		}
 		//Rotate:
 		double theta = atan2(dirVec.y, dirVec.x);
 		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
-			Storage[cnt] = vecmatmult(matrot(theta), Storage[cnt]);
+			toPlay[cnt] = vecmatmult(matrot(theta), toPlay[cnt]);
 		}
 		// Translate:
 		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
-			Storage[cnt].x += begin.x;
-			Storage[cnt].y += begin.y;
+			toPlay[cnt].x += begin.x;
+			toPlay[cnt].y += begin.y;
 		}
 		//PlayMouseMovement(time_to_move);
 		/////////////////////////////////////////////////////////////////////////
@@ -131,30 +157,27 @@ public:
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
 		double elapsedTime = 0;
-		int bucket = (double)numPoints*elapsedTime;
+		int bucket = 0;
 		while (bucket < numPoints)
 		{
 			// Apply the current bucket's action
-			SetCursorPos(Storage[bucket].x, Storage[bucket].y);
+			SetCursorPos(toPlay[bucket].x, toPlay[bucket].y);
 			// Prepare for next
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
 			//select the proper bucket for smooth movement
 			bucket = (double)numPoints*elapsedTime;
 		}
-		ToStorageForm();
 	}
-	void Record(double time_to_move, int resolutionpps)
+	void Record(double time_to_move, int resolutionpps = 1000)
 	{
 		// This algorithm works by filling a large vector of Points
 		// according to the time elapsed, then filling the the gaps by 
 		// linear interpolation
 
 		ClearStorage();
-
 		//Allocate enough Storage that the vector to have the correct resolution
 		int sizeToUse = resolutionpps * time_to_move;
-		Storage.reserve(sizeToUse);
 		while (Storage.size() < sizeToUse)
 		{
 			Storage.push_back(Point());
@@ -169,7 +192,7 @@ public:
 		double elapsedTime = 0;
 		// This structure guarantees that Storage[0] is nonempty
 		// and we never attempt to put something out of range
-		int bucket = (int)numPoints*elapsedTime;
+		int bucket = 0;
 		while (bucket < numPoints)
 		{
 			// Put something in the bucket
@@ -225,18 +248,7 @@ private:
 		int lastUnfilled = 0;
 		int totUnfilled = 0;
 		int numPoints = Storage.size();
-		if (Storage[0].x < 0 && Storage[0].y < 0)
-		{
-			for (int k = 1; k < numPoints - 1; k++)
-			{
-				if (Storage[k].x >= 0 && Storage[k].y >= 0)
-				{
-					Storage[0] = Storage[k];
-					cleanMM();
-					return;
-				}
-			}
-		}
+		// The bucket at index zero is guaranteed to have something, if it was recorded using our Record
 		for (int cnt = 0; cnt < numPoints - 1; cnt++)
 		{
 			if (Storage[cnt].x < 0 && Storage[cnt].y < 0)
@@ -293,9 +305,6 @@ private:
 		double retY = cos(theta) * randRadius + center.y;
 		return Point(retX, retY);
 	}
-	// Turn Storage into the valid storage form (goes from (0,0) to (500,0))
-
-
 	// Holds all the structs.
 	std::vector<Point> Storage;
 };
