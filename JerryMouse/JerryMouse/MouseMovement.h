@@ -205,7 +205,7 @@ public:
 			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
-		std::cout << cleanMM();
+		cleanMM();
 	}
 	void ToStorageForm()
 	{
