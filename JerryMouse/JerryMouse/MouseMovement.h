@@ -50,7 +50,8 @@ public:
 	{
 		if (waitTime == 0 && waitRadius == 0)
 		{
-			POINT * curserpos = new POINT();
+			POINT p;
+			POINT * curserpos = &p;
 			GetCursorPos(curserpos);
 			INPUT input;
 			input.type = INPUT_MOUSE;
@@ -67,7 +68,8 @@ public:
 			//Calculate sleep time
 			double sleepDuration = BellRand(waitTime, waitRadius);
 
-			POINT * curserpos = new POINT();
+			POINT p;
+			POINT * curserpos = &p;
 			GetCursorPos(curserpos);
 			INPUT input;
 			input.type = INPUT_MOUSE;
@@ -238,6 +240,8 @@ public:
 		char * bytearr = new char[bytesize];
 		memcpy(bytearr, &Storage[0], sizeof(Point)* StorageSize);
 		file.write(bytearr, bytesize);
+		file.close();
+		delete bytearr;
 	}
 	void ReadToStorage(std::string path)
 	{
@@ -265,6 +269,8 @@ public:
 			Storage[k].x = ArrToCpy[k].x;
 			Storage[k].y = ArrToCpy[k].y;
 		}
+		fclose(file);
+		delete fileBuff;
 	}
 private:
 	void ClearStorage()
