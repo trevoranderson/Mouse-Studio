@@ -173,7 +173,7 @@ public:
 			bucket = (double)numPoints*elapsedTime;
 		}
 	}
-	void Record(double time_to_move, int resolutionpps = 1000)
+	void Record(double time_to_move, int resolutionpps = 3000)
 	{
 		// This algorithm works by filling a large vector of Points
 		// according to the time elapsed, then filling the the gaps by 
@@ -205,7 +205,7 @@ public:
 			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
-		cleanMM();
+		std::cout << cleanMM();
 	}
 	void ToStorageForm()
 	{
@@ -281,8 +281,10 @@ private:
 			i.y = -1;
 		}
 	}
-	void cleanMM()
+	int cleanMM()
 	{
+		int numCleaned = 0;
+		int restCleaned = 0;
 		//Here we want to take our array of mouse positions and interpolate between measurements
 		Point Previous(0, 0);
 		Point Current(0, 0);
@@ -299,7 +301,7 @@ private:
 				lastUnfilled = cnt;
 				Previous.x = Storage[cnt - 1].x;
 				Previous.y = Storage[cnt - 1].y;
-				for (cnt = cnt + 1; Storage[cnt].x < 0 && Storage[cnt].y < 0; cnt++)
+				for (cnt = cnt + 1; (cnt < numPoints - 1) && Storage[cnt].x < 0 && Storage[cnt].y < 0; cnt++)
 				{
 					lastUnfilled++;
 				}
@@ -318,7 +320,7 @@ private:
 				{
 					Storage[p + firstUnfilled].x = dirVec.x*((p + 1) / divider) + Previous.x;
 					Storage[p + firstUnfilled].y = dirVec.y*((p + 1) / divider) + Previous.y;
-
+					numCleaned++;
 				}
 				totUnfilled += lastUnfilled - firstUnfilled + 1;
 
@@ -330,8 +332,9 @@ private:
 		{
 			Storage[numPoints - 1].x = Previous.x;
 			Storage[numPoints - 1].y = Previous.y;
-			cleanMM();
+			restCleaned = cleanMM();
 		}
+		return numCleaned + restCleaned;
 	}
 	Point generateDest(Point center, double radius)
 	{

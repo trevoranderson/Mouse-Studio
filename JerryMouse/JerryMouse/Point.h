@@ -2,11 +2,11 @@
 class Point
 {
 public:
-	Point(int first = -1, int second = -1)
+	Point(_int16 first = -1, _int16 second = -1)
 	{
 		x = first;
 		y = second;
 	}
-	int x;
-	int y;
+	_int16 x;
+	_int16 y;
 };
