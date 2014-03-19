@@ -1,5 +1,7 @@
 #pragma once
 #include <vector>
+#include <fstream>
+#include <stdio.h>
 #include "Point.h"
 #include "Mat2.h"
 #define DISTLENGTH 1000
@@ -178,10 +180,7 @@ public:
 		ClearStorage();
 		//Allocate enough Storage that the vector to have the correct resolution
 		int sizeToUse = resolutionpps * time_to_move;
-		while (Storage.size() < sizeToUse)
-		{
-			Storage.push_back(Point());
-		}
+		Storage.resize(sizeToUse);
 		int numPoints = Storage.size();
 
 		POINT Q;
@@ -228,6 +227,43 @@ public:
 		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
 			Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
+		}
+	}
+	void OutputStorage(std::string path)
+	{
+		// copy Storage into a large char array.
+		std::ofstream file(path, std::ios::binary);
+		int StorageSize = Storage.size();
+		int bytesize = sizeof(Point)*(Storage.size());
+		char * bytearr = new char[bytesize];
+		memcpy(bytearr, &Storage[0], sizeof(Point)* StorageSize);
+		file.write(bytearr, bytesize);
+	}
+	void ReadToStorage(std::string path)
+	{
+		FILE * file = NULL;
+		if ((file = fopen(path.c_str(), "rb")) == NULL)
+		{
+			std::cout << "Could not open specified file" << std::endl;
+		}
+		long lCurPos, lEndPos;
+		lCurPos = ftell(file);
+		fseek(file, 0, 2);
+		lEndPos = ftell(file);
+		fseek(file, lCurPos, 0);
+		
+		int fileSize = lEndPos;
+		void * fileBuff = new char[fileSize];
+		fread(fileBuff, fileSize, 1, file);
+
+		//Cast it to Points and fill Storage
+		int StorageSize = fileSize / (sizeof(Point));
+		Storage.resize(StorageSize);
+		Point * ArrToCpy = (Point*)fileBuff;
+		for (int k = 0; k < StorageSize; k++)
+		{
+			Storage[k].x = ArrToCpy[k].x;
+			Storage[k].y = ArrToCpy[k].y;
 		}
 	}
 private:

@@ -2,11 +2,11 @@
 class Point
 {
 public:
-	Point(double first = -1, double second = -1)
+	Point(int first = -1, int second = -1)
 	{
 		x = first;
 		y = second;
 	}
-	double x;
-	double y;
+	int x;
+	int y;
 };
