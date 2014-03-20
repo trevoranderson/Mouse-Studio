@@ -2,9 +2,10 @@
 #include <vector>
 #include <fstream>
 #include <stdio.h>
+#include <Windows.h>
 #include "Point.h"
 #include "Mat2.h"
-#define DISTLENGTH 1000
+#define DISTLENGTH 10000
 double BellRand(double width, double center)
 {
 	// Generates a random number around a given center and a distribution max length
@@ -25,6 +26,31 @@ inline double TimeDifference(SYSTEMTIME A, SYSTEMTIME B)
 	double ret = (A.wHour - B.wHour) * 3600 + (A.wMinute - B.wMinute) * 60 + A.wSecond - B.wSecond + (double)(A.wMilliseconds - B.wMilliseconds) / 1000;
 	return ret;
 }
+void vecToOrigin(std::vector<Point> & toTransform)
+{
+	//Translates to origin-> rotates theta to zero -> scales to 500 total pixels in X-axis
+	// first translate all points to origin
+	Point first(toTransform[0].x, toTransform[0].y);
+	int numPoints = toTransform.size();
+	for (int cnt = 0; cnt < numPoints; cnt++)
+	{
+		toTransform[cnt].x -= first.x;
+		toTransform[cnt].y -= first.y;
+	}
+	//find the angle between the ending points and set it equal to zero.
+	double theta = atan2((toTransform[numPoints - 1].y), (toTransform[numPoints - 1].x));
+	for (int cnt = 0; cnt < numPoints; cnt++)
+	{
+		toTransform[cnt] = vecmatmult(matrot(-theta), toTransform[cnt]);
+	}
+	//finally, scale the length to a predetermined amount
+	double scaleFactor = (double)DISTLENGTH / (toTransform[numPoints - 1].x);
+	for (int cnt = 0; cnt < numPoints; cnt++)
+	{
+		toTransform[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), toTransform[cnt]);
+	}
+}
+
 class MouseMovement
 {
 public:
@@ -133,12 +159,16 @@ public:
 	{
 		// Since we are doing transformations, build a tmp storage vector from the old
 		std::vector<Point> toPlay = Storage;
-		//scale -> rotate -> translate such that you cover the wanted path
-		//Scale:
+		// Move it to origin so transformations work properly
+		// Now starts at (0,0) ends at (DISTLENGTH,0)
+		vecToOrigin(toPlay);
+		int StorageSize = Storage.size();
 		Point dirVec(end.x - begin.x, end.y - begin.y);
 		double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
-		double scaleFactor = 1.0;
+		double scaleFactor = displacement/DISTLENGTH;
 		int numPoints = toPlay.size();
+		//scale -> rotate -> translate such that you cover the wanted path
+		//Scale:
 		for (int cnt = 0; cnt < numPoints; cnt++)
 		{
 			toPlay[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), toPlay[cnt]);
@@ -155,7 +185,7 @@ public:
 			toPlay[cnt].x += begin.x;
 			toPlay[cnt].y += begin.y;
 		}
-		//PlayMouseMovement(time_to_move);
+		//PlayMouseMovement
 		/////////////////////////////////////////////////////////////////////////
 		SYSTEMTIME start_time;
 		GetSystemTime(&start_time);
@@ -206,30 +236,6 @@ public:
 		}
 		// Interpolate
 		cleanMM();
-	}
-	void ToStorageForm()
-	{
-		//Translates to origin-> rotates theta to zero -> scales to 500 total pixels in X-axis
-		// first translate all points to origin
-		Point first(Storage[0].x, Storage[0].y);
-		int numPoints = Storage.size();
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			Storage[cnt].x -= first.x;
-			Storage[cnt].y -= first.y;
-		}
-		//find the angle between the ending points and set it equal to zero.
-		double theta = atan2((Storage[numPoints - 1].y), (Storage[numPoints - 1].x));
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			Storage[cnt] = vecmatmult(matrot(-theta), Storage[cnt]);
-		}
-		//finally, scale the length to a predetermined amount
-		double scaleFactor = (double)DISTLENGTH / (Storage[numPoints - 1].x);
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			Storage[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), Storage[cnt]);
-		}
 	}
 	void OutputStorage(std::string path)
 	{
