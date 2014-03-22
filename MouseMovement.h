@@ -54,6 +54,13 @@ void vecToOrigin(std::vector<Point> & toTransform)
 class MouseMovement
 {
 public:
+	MouseMovement()
+	{ /* Without arguments, cannot construct stuff */
+	}
+	MouseMovement(std::string path)
+	{
+		ReadToStorage(path);
+	}
 	void LinearMove(Point start, Point end, double time_to_move)
 	{
 		if (start.x == end.x && start.y == end.y)
@@ -165,7 +172,7 @@ public:
 		int StorageSize = Storage.size();
 		Point dirVec(end.x - begin.x, end.y - begin.y);
 		double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
-		double scaleFactor = displacement/DISTLENGTH;
+		double scaleFactor = displacement / DISTLENGTH;
 		int numPoints = toPlay.size();
 		//scale -> rotate -> translate such that you cover the wanted path
 		//Scale:
@@ -208,7 +215,7 @@ public:
 		// This algorithm works by filling a large vector of Points
 		// according to the time elapsed, then filling the the gaps by 
 		// linear interpolation
-
+		pointspersecond = resolutionpps;
 		ClearStorage();
 		//Allocate enough Storage that the vector to have the correct resolution
 		int sizeToUse = resolutionpps * time_to_move;
@@ -242,9 +249,10 @@ public:
 		// copy Storage into a large char array.
 		std::ofstream file(path, std::ios::binary);
 		int StorageSize = Storage.size();
-		int bytesize = sizeof(Point)*(Storage.size());
+		int bytesize = sizeof(Point)*(Storage.size()) + sizeof(pointspersecond);
 		char * bytearr = new char[bytesize];
-		memcpy(bytearr, &Storage[0], sizeof(Point)* StorageSize);
+		memcpy(bytearr, &pointspersecond, sizeof(pointspersecond));
+		memcpy(bytearr + sizeof(pointspersecond), &Storage[0], sizeof(Point)* StorageSize);
 		file.write(bytearr, bytesize);
 		file.close();
 		delete bytearr;
@@ -261,15 +269,15 @@ public:
 		fseek(file, 0, 2);
 		lEndPos = ftell(file);
 		fseek(file, lCurPos, 0);
-		
+
 		int fileSize = lEndPos;
 		void * fileBuff = new char[fileSize];
 		fread(fileBuff, fileSize, 1, file);
-
+		pointspersecond = *((_int16*)fileBuff);
 		//Cast it to Points and fill Storage
-		int StorageSize = fileSize / (sizeof(Point));
+		int StorageSize = (fileSize - sizeof(pointspersecond)) / (sizeof(Point));
 		Storage.resize(StorageSize);
-		Point * ArrToCpy = (Point*)fileBuff;
+		Point * ArrToCpy = (Point*)((char*)fileBuff+sizeof(pointspersecond));
 		for (int k = 0; k < StorageSize; k++)
 		{
 			Storage[k].x = ArrToCpy[k].x;
@@ -358,4 +366,5 @@ private:
 	}
 	// Holds all the structs.
 	std::vector<Point> Storage;
+	_int16 pointspersecond;
 };
