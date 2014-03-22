@@ -183,7 +183,9 @@ public:
 		if (time_to_move > (Storage.size() / pointspersecond));
 		{
 			toPlay = &other;
-			toPlay->Storage	= resizeWithResolution(time_to_move);
+			toPlay->Storage = Storage;
+			toPlay->pointspersecond = pointspersecond;
+			toPlay->resizeWithResolution(time_to_move);
 		}
 		SYSTEMTIME start_time;
 		GetSystemTime(&start_time);
@@ -315,6 +317,7 @@ private:
 		nStorage.resize(nSize);
 		resizeHelper(0, Storage.size(), nStorage);
 		cleanMM(nStorage);
+		Storage = nStorage;
 		return nStorage;
 	}
 	void ClearStorage()
