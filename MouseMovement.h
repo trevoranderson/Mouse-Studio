@@ -50,7 +50,35 @@ void vecToOrigin(std::vector<Point> & toTransform)
 		toTransform[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), toTransform[cnt]);
 	}
 }
-
+void transformToPoints(Point A, Point B, std::vector<Point> & toTrans)
+{
+	// Move it to origin so transformations work properly
+	// Now starts at (0,0) Bs at (DISTLENGTH,0)
+	vecToOrigin(toTrans);
+	int size = toTrans.size();
+	Point dirVec(B.x - A.x, B.y - A.y);
+	double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
+	double scaleFactor = displacement / DISTLENGTH;
+	int numPoints = toTrans.size();
+	//scale -> rotate -> translate such that you cover the wanted path
+	//Scale:
+	for (auto &i : toTrans)
+	{
+		i = vecmatmult(matscale(scaleFactor, scaleFactor), i);
+	}
+	//Rotate:
+	double theta = atan2(dirVec.y, dirVec.x);
+	for (auto &i : toTrans)
+	{
+		i = vecmatmult(matrot(theta), i);
+	}
+	// Translate:
+	for (auto &i : toTrans)
+	{
+		i.x += A.x;
+		i.y += A.y;
+	}
+}
 class MouseMovement
 {
 public:
@@ -61,7 +89,7 @@ public:
 	{
 		Load(path);
 	}
-	void LinearMove(Point start, Point end, double time_to_move)
+	void LinearMove(Point start, Point end, double time_to_move)const
 	{
 		if (start.x == end.x && start.y == end.y)
 		{
@@ -143,27 +171,30 @@ public:
 		ip.ki.dwFlags = KEYEVENTF_KEYUP; // KEYEVENTF_KEYUP for key release
 		SendInput(1, &ip, sizeof(INPUT));
 	}
-	void PlayMovement()
+	void Play()
 	{
-		PlayMovement(Storage.size() / pointspersecond);
+		Play(Storage.size() / pointspersecond);
 	}
-	void PlayMovement(double time_to_move)
+	void Play(double time_to_move)
 	{
+		MouseMovement * toPlay = this;
+		MouseMovement other;
 		// Resize if we are smaller than Storage
 		if (time_to_move > (Storage.size() / pointspersecond));
 		{
-			Storage = resizeWithResolution(time_to_move, Storage);
+			toPlay = &other;
+			toPlay->Storage	= resizeWithResolution(time_to_move);
 		}
 		SYSTEMTIME start_time;
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
 		double elapsedTime = 0;
-		int numPoints = Storage.size();
+		int numPoints = toPlay->Storage.size();
 		int bucket = 0;
 		while (bucket < numPoints)
 		{
 			// Apply the current bucket's action
-			SetCursorPos(Storage[bucket].x, Storage[bucket].y);
+			SetCursorPos(toPlay->Storage[bucket].x, toPlay->Storage[bucket].y);
 			// Prepare for next
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
@@ -171,63 +202,15 @@ public:
 			bucket = (double)numPoints*elapsedTime;
 		}
 	}
-	void PlayCurrentBetweenPoints(Point begin, Point end)
+	void PlayBetweenPoints(Point begin, Point end)
 	{
-		PlayCurrentBetweenPoints(begin, end, Storage.size() / pointspersecond);
+		PlayBetweenPoints(begin, end, Storage.size() / pointspersecond);
 	}
-	void PlayCurrentBetweenPoints(Point begin, Point end, double time_to_move)
+	void PlayBetweenPoints(Point begin, Point end, double time_to_move)
 	{
-
-		// Since we are doing transformations, build a tmp storage vector from the old
-		std::vector<Point> toPlay = Storage;
-		// Resize if we are smaller than Storage
-		if (time_to_move > (Storage.size() / pointspersecond));
-		{
-			toPlay = resizeWithResolution(time_to_move, toPlay);
-		}
-		// Move it to origin so transformations work properly
-		// Now starts at (0,0) ends at (DISTLENGTH,0)
-		vecToOrigin(toPlay);
-		int StorageSize = Storage.size();
-		Point dirVec(end.x - begin.x, end.y - begin.y);
-		double displacement = sqrt((dirVec.x) * (dirVec.x) + (dirVec.y) * (dirVec.y));
-		double scaleFactor = displacement / DISTLENGTH;
-		int numPoints = toPlay.size();
-		//scale -> rotate -> translate such that you cover the wanted path
-		//Scale:
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			toPlay[cnt] = vecmatmult(matscale(scaleFactor, scaleFactor), toPlay[cnt]);
-		}
-		//Rotate:
-		double theta = atan2(dirVec.y, dirVec.x);
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			toPlay[cnt] = vecmatmult(matrot(theta), toPlay[cnt]);
-		}
-		// Translate:
-		for (int cnt = 0; cnt < numPoints; cnt++)
-		{
-			toPlay[cnt].x += begin.x;
-			toPlay[cnt].y += begin.y;
-		}
-		//PlayMouseMovement
-		/////////////////////////////////////////////////////////////////////////
-		SYSTEMTIME start_time;
-		GetSystemTime(&start_time);
-		SYSTEMTIME now_time;
-		double elapsedTime = 0;
-		int bucket = 0;
-		while (bucket < numPoints)
-		{
-			// Apply the current bucket's action
-			SetCursorPos(toPlay[bucket].x, toPlay[bucket].y);
-			// Prepare for next
-			GetSystemTime(&now_time);
-			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
-			//select the proper bucket for smooth movement
-			bucket = (double)numPoints*elapsedTime;
-		}
+		MouseMovement toPlay(*this);
+		transformToPoints(begin, end, toPlay.Storage);
+		toPlay.Play(time_to_move);
 	}
 	void Record(double time_to_move, int resolutionpps = 3000)
 	{
@@ -263,7 +246,7 @@ public:
 		// Interpolate
 		cleanMM(Storage);
 	}
-	void Save(std::string path)
+	void Save(std::string path)const
 	{
 		// copy Storage into a large char array.
 		std::ofstream file(path, std::ios::binary);
@@ -310,27 +293,27 @@ private:
 	/* Left and Right correspond to the part of Storage we are operating on
 	*  It should recursively divide Storage placing the pivots in output
 	*/
-	void resizeHelper(int left, int right, std::vector<Point> &output, std::vector<Point> &input)
+	void resizeHelper(int left, int right, std::vector<Point> &output)
 	{ //Right should be out of range by one for intuitive iteration
 		if (right - left <= 0)
 		{
 			return;
 		}
 		int pivot = (right + left) / 2;
-		int outInd = ((double)pivot / input.size())* output.size();
-		output[outInd].x = input[pivot].x;
-		output[outInd].y = input[pivot].y;
+		int outInd = ((double)pivot / Storage.size())* output.size();
+		output[outInd].x = Storage[pivot].x;
+		output[outInd].y = Storage[pivot].y;
 		// Divide into left and right sides
-		resizeHelper(left, pivot, output, input);
-		resizeHelper(pivot + 1, right, output, input);
+		resizeHelper(left, pivot, output);
+		resizeHelper(pivot + 1, right, output);
 	}
-	std::vector<Point> resizeWithResolution(double timeToPlay, std::vector<Point> & toResize)
+	std::vector<Point> resizeWithResolution(double timeToPlay)
 	{
 		// maintains resolution, but builds a new vector
 		double nSize = timeToPlay*pointspersecond;
 		std::vector<Point> nStorage;
 		nStorage.resize(nSize);
-		resizeHelper(0, toResize.size(), nStorage,toResize);
+		resizeHelper(0, Storage.size(), nStorage);
 		cleanMM(nStorage);
 		return nStorage;
 	}
