@@ -59,7 +59,7 @@ public:
 	}
 	MouseMovement(std::string path)
 	{
-		ReadToStorage(path);
+		Load(path);
 	}
 	void LinearMove(Point start, Point end, double time_to_move)
 	{
@@ -143,8 +143,17 @@ public:
 		ip.ki.dwFlags = KEYEVENTF_KEYUP; // KEYEVENTF_KEYUP for key release
 		SendInput(1, &ip, sizeof(INPUT));
 	}
-	void PlayCurrentMovement(double time_to_move)
+	void PlayMovement()
 	{
+		PlayMovement(Storage.size() / pointspersecond);
+	}
+	void PlayMovement(double time_to_move)
+	{
+		// Resize if we are smaller than Storage
+		if (time_to_move > (Storage.size() / pointspersecond));
+		{
+			Storage = resizeWithResolution(time_to_move, Storage);
+		}
 		SYSTEMTIME start_time;
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
@@ -162,10 +171,20 @@ public:
 			bucket = (double)numPoints*elapsedTime;
 		}
 	}
+	void PlayCurrentBetweenPoints(Point begin, Point end)
+	{
+		PlayCurrentBetweenPoints(begin, end, Storage.size() / pointspersecond);
+	}
 	void PlayCurrentBetweenPoints(Point begin, Point end, double time_to_move)
 	{
+
 		// Since we are doing transformations, build a tmp storage vector from the old
 		std::vector<Point> toPlay = Storage;
+		// Resize if we are smaller than Storage
+		if (time_to_move > (Storage.size() / pointspersecond));
+		{
+			toPlay = resizeWithResolution(time_to_move, toPlay);
+		}
 		// Move it to origin so transformations work properly
 		// Now starts at (0,0) ends at (DISTLENGTH,0)
 		vecToOrigin(toPlay);
@@ -242,9 +261,9 @@ public:
 			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
-		cleanMM();
+		cleanMM(Storage);
 	}
-	void OutputStorage(std::string path)
+	void Save(std::string path)
 	{
 		// copy Storage into a large char array.
 		std::ofstream file(path, std::ios::binary);
@@ -257,7 +276,7 @@ public:
 		file.close();
 		delete bytearr;
 	}
-	void ReadToStorage(std::string path)
+	void Load(std::string path)
 	{
 		FILE * file = NULL;
 		if ((file = fopen(path.c_str(), "rb")) == NULL)
@@ -277,7 +296,7 @@ public:
 		//Cast it to Points and fill Storage
 		int StorageSize = (fileSize - sizeof(pointspersecond)) / (sizeof(Point));
 		Storage.resize(StorageSize);
-		Point * ArrToCpy = (Point*)((char*)fileBuff+sizeof(pointspersecond));
+		Point * ArrToCpy = (Point*)((char*)fileBuff + sizeof(pointspersecond));
 		for (int k = 0; k < StorageSize; k++)
 		{
 			Storage[k].x = ArrToCpy[k].x;
@@ -286,34 +305,35 @@ public:
 		fclose(file);
 		delete fileBuff;
 	}
+
+private:
 	/* Left and Right correspond to the part of Storage we are operating on
 	*  It should recursively divide Storage placing the pivots in output
 	*/
-	void resizeHelper(int left, int right, std::vector<Point> &output)
+	void resizeHelper(int left, int right, std::vector<Point> &output, std::vector<Point> &input)
 	{ //Right should be out of range by one for intuitive iteration
 		if (right - left <= 0)
 		{
 			return;
 		}
 		int pivot = (right + left) / 2;
-		int outInd = ((double)pivot/Storage.size())* output.size();
-		output[outInd].x = Storage[pivot].x;
-		output[outInd].y = Storage[pivot].y;
+		int outInd = ((double)pivot / input.size())* output.size();
+		output[outInd].x = input[pivot].x;
+		output[outInd].y = input[pivot].y;
 		// Divide into left and right sides
-		resizeHelper(left, pivot, output);
-		resizeHelper(pivot + 1, right, output);
+		resizeHelper(left, pivot, output, input);
+		resizeHelper(pivot + 1, right, output, input);
 	}
-	void resizeWithResolution(double timeToPlay)
+	std::vector<Point> resizeWithResolution(double timeToPlay, std::vector<Point> & toResize)
 	{
 		// maintains resolution, but builds a new vector
 		double nSize = timeToPlay*pointspersecond;
 		std::vector<Point> nStorage;
 		nStorage.resize(nSize);
-		resizeHelper(0, Storage.size(), nStorage);
-		Storage = nStorage;
-		cleanMM();
+		resizeHelper(0, toResize.size(), nStorage,toResize);
+		cleanMM(nStorage);
+		return nStorage;
 	}
-private:
 	void ClearStorage()
 	{
 		for (auto &i : Storage)
@@ -322,7 +342,7 @@ private:
 			i.y = -1;
 		}
 	}
-	int cleanMM()
+	int cleanMM(std::vector<Point> & toClean)
 	{
 		int numCleaned = 0;
 		int restCleaned = 0;
@@ -332,17 +352,17 @@ private:
 		int firstUnfilled = 0;
 		int lastUnfilled = 0;
 		int totUnfilled = 0;
-		int numPoints = Storage.size();
+		int numPoints = toClean.size();
 		// The bucket at index zero is guaranteed to have something, if it was recorded using our Record
 		for (int cnt = 0; cnt < numPoints - 1; cnt++)
 		{
-			if (Storage[cnt].x < 0 && Storage[cnt].y < 0)
+			if (toClean[cnt].x < 0 && toClean[cnt].y < 0)
 			{
 				firstUnfilled = cnt;
 				lastUnfilled = cnt;
-				Previous.x = Storage[cnt - 1].x;
-				Previous.y = Storage[cnt - 1].y;
-				for (cnt = cnt + 1; (cnt < numPoints - 1) && Storage[cnt].x < 0 && Storage[cnt].y < 0; cnt++)
+				Previous.x = toClean[cnt - 1].x;
+				Previous.y = toClean[cnt - 1].y;
+				for (cnt = cnt + 1; (cnt < numPoints - 1) && toClean[cnt].x < 0 && toClean[cnt].y < 0; cnt++)
 				{
 					lastUnfilled++;
 				}
@@ -351,16 +371,16 @@ private:
 					break;
 				}
 				//Now we have Previous, first unfilled, last unfilled
-				Current.x = Storage[cnt].x;
-				Current.y = Storage[cnt].y;
+				Current.x = toClean[cnt].x;
+				Current.y = toClean[cnt].y;
 
 				//now loop through unfilled buckets, interpolating the values
 				double divider = lastUnfilled - firstUnfilled + 2; // if we have 3,5, we need to divide the gap into 4 spaces
 				Point dirVec = Point(Current.x - Previous.x, Current.y - Previous.y);
 				for (int p = 0; p < divider - 1; p++)
 				{
-					Storage[p + firstUnfilled].x = dirVec.x*(((double)p + 1) / divider) + Previous.x;
-					Storage[p + firstUnfilled].y = dirVec.y*(((double)p + 1) / divider) + Previous.y;
+					toClean[p + firstUnfilled].x = dirVec.x*(((double)p + 1) / divider) + Previous.x;
+					toClean[p + firstUnfilled].y = dirVec.y*(((double)p + 1) / divider) + Previous.y;
 					numCleaned++;
 				}
 				totUnfilled += lastUnfilled - firstUnfilled + 1;
@@ -369,11 +389,13 @@ private:
 		}
 		//if the last value is garbage, we need to put a value there
 		// and loop back through the array in order to fill things.
-		if (Storage[numPoints - 1].x < 0 && Storage[numPoints - 1].y < 0)
+		int last = numPoints - 1;
+		while (toClean[last].x < 0 || toClean[last].y < 0)
 		{
-			Storage[numPoints - 1].x = Previous.x;
-			Storage[numPoints - 1].y = Previous.y;
-			restCleaned = cleanMM();
+			toClean[last].x = Previous.x;
+			toClean[last].y = Previous.y;
+			restCleaned++;
+			last--;
 		}
 		return numCleaned + restCleaned;
 	}
