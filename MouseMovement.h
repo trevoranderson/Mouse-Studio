@@ -286,6 +286,33 @@ public:
 		fclose(file);
 		delete fileBuff;
 	}
+	/* Left and Right correspond to the part of Storage we are operating on
+	*  It should recursively divide Storage placing the pivots in output
+	*/
+	void resizeHelper(int left, int right, std::vector<Point> &output)
+	{ //Right should be out of range by one for intuitive iteration
+		if (right - left <= 0)
+		{
+			return;
+		}
+		int pivot = (right + left) / 2;
+		int outInd = ((double)pivot/Storage.size())* output.size();
+		output[outInd].x = Storage[pivot].x;
+		output[outInd].y = Storage[pivot].y;
+		// Divide into left and right sides
+		resizeHelper(left, pivot, output);
+		resizeHelper(pivot + 1, right, output);
+	}
+	void resizeWithResolution(double timeToPlay)
+	{
+		// maintains resolution, but builds a new vector
+		double nSize = timeToPlay*pointspersecond;
+		std::vector<Point> nStorage;
+		nStorage.resize(nSize);
+		resizeHelper(0, Storage.size(), nStorage);
+		Storage = nStorage;
+		cleanMM();
+	}
 private:
 	void ClearStorage()
 	{
@@ -332,8 +359,8 @@ private:
 				Point dirVec = Point(Current.x - Previous.x, Current.y - Previous.y);
 				for (int p = 0; p < divider - 1; p++)
 				{
-					Storage[p + firstUnfilled].x = dirVec.x*((p + 1) / divider) + Previous.x;
-					Storage[p + firstUnfilled].y = dirVec.y*((p + 1) / divider) + Previous.y;
+					Storage[p + firstUnfilled].x = dirVec.x*(((double)p + 1) / divider) + Previous.x;
+					Storage[p + firstUnfilled].y = dirVec.y*(((double)p + 1) / divider) + Previous.y;
 					numCleaned++;
 				}
 				totUnfilled += lastUnfilled - firstUnfilled + 1;
