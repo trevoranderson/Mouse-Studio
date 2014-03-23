@@ -212,6 +212,16 @@ public:
 	{
 		MouseMovement toPlay(*this);
 		transformToPoints(begin, end, toPlay.Storage);
+		// Resize if the ending path length is larger than the original
+		Point vec = Point((end.x - begin.x), (end.y - begin.y));
+		double disp = sqrt(vec.x * vec.x + vec.y * vec.y);
+		Point origVec = Point((Storage[Storage.size() - 1].x - Storage[0].x), (Storage[Storage.size() - 1].y - Storage[0].y));
+		double origDisp = sqrt( origVec.x*origVec.x + origVec.y*origVec.y );
+		if (disp / origDisp > 1)
+		{
+			toPlay.resizeWithResolution(time_to_move * (disp / origDisp));
+			toPlay.pointspersecond *= (disp / origDisp);
+		}
 		toPlay.Play(time_to_move);
 	}
 	void Record(double time_to_move, int resolutionpps = 3000)
@@ -246,7 +256,7 @@ public:
 			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
-		cleanMM(Storage);
+		Interpolate(Storage);
 	}
 	void Save(std::string path)const
 	{
@@ -290,7 +300,6 @@ public:
 		fclose(file);
 		delete fileBuff;
 	}
-
 private:
 	/* Left and Right correspond to the part of Storage we are operating on
 	*  It should recursively divide Storage placing the pivots in output
@@ -309,16 +318,15 @@ private:
 		resizeHelper(left, pivot, output);
 		resizeHelper(pivot + 1, right, output);
 	}
-	std::vector<Point> resizeWithResolution(double timeToPlay)
+	void resizeWithResolution(double timeToPlay)
 	{
 		// maintains resolution, but builds a new vector
 		double nSize = timeToPlay*pointspersecond;
 		std::vector<Point> nStorage;
 		nStorage.resize(nSize);
 		resizeHelper(0, Storage.size(), nStorage);
-		cleanMM(nStorage);
+		Interpolate(nStorage);
 		Storage = nStorage;
-		return nStorage;
 	}
 	void ClearStorage()
 	{
@@ -328,7 +336,7 @@ private:
 			i.y = -1;
 		}
 	}
-	int cleanMM(std::vector<Point> & toClean)
+	int Interpolate(std::vector<Point> & toInterpolate)
 	{
 		int numCleaned = 0;
 		int restCleaned = 0;
@@ -338,17 +346,17 @@ private:
 		int firstUnfilled = 0;
 		int lastUnfilled = 0;
 		int totUnfilled = 0;
-		int numPoints = toClean.size();
+		int numPoints = toInterpolate.size();
 		// The bucket at index zero is guaranteed to have something, if it was recorded using our Record
 		for (int cnt = 0; cnt < numPoints - 1; cnt++)
 		{
-			if (toClean[cnt].x < 0 && toClean[cnt].y < 0)
+			if (toInterpolate[cnt].x < 0 && toInterpolate[cnt].y < 0)
 			{
 				firstUnfilled = cnt;
 				lastUnfilled = cnt;
-				Previous.x = toClean[cnt - 1].x;
-				Previous.y = toClean[cnt - 1].y;
-				for (cnt = cnt + 1; (cnt < numPoints - 1) && toClean[cnt].x < 0 && toClean[cnt].y < 0; cnt++)
+				Previous.x = toInterpolate[cnt - 1].x;
+				Previous.y = toInterpolate[cnt - 1].y;
+				for (cnt = cnt + 1; (cnt < numPoints - 1) && toInterpolate[cnt].x < 0 && toInterpolate[cnt].y < 0; cnt++)
 				{
 					lastUnfilled++;
 				}
@@ -357,16 +365,16 @@ private:
 					break;
 				}
 				//Now we have Previous, first unfilled, last unfilled
-				Current.x = toClean[cnt].x;
-				Current.y = toClean[cnt].y;
+				Current.x = toInterpolate[cnt].x;
+				Current.y = toInterpolate[cnt].y;
 
 				//now loop through unfilled buckets, interpolating the values
 				double divider = lastUnfilled - firstUnfilled + 2; // if we have 3,5, we need to divide the gap into 4 spaces
 				Point dirVec = Point(Current.x - Previous.x, Current.y - Previous.y);
 				for (int p = 0; p < divider - 1; p++)
 				{
-					toClean[p + firstUnfilled].x = dirVec.x*(((double)p + 1) / divider) + Previous.x;
-					toClean[p + firstUnfilled].y = dirVec.y*(((double)p + 1) / divider) + Previous.y;
+					toInterpolate[p + firstUnfilled].x = dirVec.x*(((double)p + 1) / divider) + Previous.x;
+					toInterpolate[p + firstUnfilled].y = dirVec.y*(((double)p + 1) / divider) + Previous.y;
 					numCleaned++;
 				}
 				totUnfilled += lastUnfilled - firstUnfilled + 1;
@@ -376,10 +384,10 @@ private:
 		//if the last value is garbage, we need to put a value there
 		// and loop back through the array in order to fill things.
 		int last = numPoints - 1;
-		while (toClean[last].x < 0 || toClean[last].y < 0)
+		while (toInterpolate[last].x < 0 || toInterpolate[last].y < 0)
 		{
-			toClean[last].x = Previous.x;
-			toClean[last].y = Previous.y;
+			toInterpolate[last].x = Previous.x;
+			toInterpolate[last].y = Previous.y;
 			restCleaned++;
 			last--;
 		}
