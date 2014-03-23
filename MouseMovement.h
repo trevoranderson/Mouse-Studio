@@ -30,12 +30,12 @@ void vecToOrigin(std::vector<Point> & toTransform)
 {
 	//Translates to origin-> rotates theta to zero -> scales to 500 total pixels in X-axis
 	// first translate all points to origin
-	Point first(toTransform[0].x, toTransform[0].y);
+	Point firstPoint(toTransform[0].x, toTransform[0].y);
 	int numPoints = toTransform.size();
 	for (int cnt = 0; cnt < numPoints; cnt++)
 	{
-		toTransform[cnt].x -= first.x;
-		toTransform[cnt].y -= first.y;
+		toTransform[cnt].x -= firstPoint.x;
+		toTransform[cnt].y -= firstPoint.y;
 	}
 	//find the angle between the ending points and set it equal to zero.
 	double theta = atan2((toTransform[numPoints - 1].y), (toTransform[numPoints - 1].x));
@@ -216,7 +216,7 @@ public:
 		Point vec = Point((end.x - begin.x), (end.y - begin.y));
 		double disp = sqrt(vec.x * vec.x + vec.y * vec.y);
 		Point origVec = Point((Storage[Storage.size() - 1].x - Storage[0].x), (Storage[Storage.size() - 1].y - Storage[0].y));
-		double origDisp = sqrt( origVec.x*origVec.x + origVec.y*origVec.y );
+		double origDisp = sqrt(origVec.x*origVec.x + origVec.y*origVec.y);
 		if (disp / origDisp > 1)
 		{
 			toPlay.resizeWithResolution(time_to_move * (disp / origDisp));
@@ -287,7 +287,7 @@ public:
 		int fileSize = lEndPos;
 		void * fileBuff = new char[fileSize];
 		fread(fileBuff, fileSize, 1, file);
-		pointspersecond = *((_int16*)fileBuff);
+		pointspersecond = *((unsigned int*)fileBuff);
 		//Cast it to Points and fill Storage
 		int StorageSize = (fileSize - sizeof(pointspersecond)) / (sizeof(Point));
 		Storage.resize(StorageSize);
@@ -409,5 +409,5 @@ private:
 	}
 	// Holds all the structs.
 	std::vector<Point> Storage;
-	_int16 pointspersecond;
+	unsigned int pointspersecond;
 };
