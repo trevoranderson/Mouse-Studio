@@ -79,6 +79,24 @@ void transformToPoints(Point A, Point B, std::vector<Point> & toTrans)
 		i.y += A.y;
 	}
 }
+bool operator== (Point A, Point B)
+{
+	return A.x == B.x && A.y == B.y;
+}
+//returns array size 2 POINTS CANNOT BE THE SAME
+Point * getControlPoints(Point A, Point B, Point C, double t = 0)
+{
+	double d01 = sqrt(pow(B.x - A.x, 2) + pow(B.y - A.y, 2));
+	double d12 = sqrt(pow(C.x - B.x, 2) + pow(C.y - B.y, 2));
+	double fa = (t * d01) / (d01 + d12); // CARE FOR DIV0!
+	double fb = (t * d12) / (d01 + d12);
+	double p1x = B.x - fa * (C.x - A.x);
+	double p1y = B.y - fa * (C.y - A.y);
+	double p2x = B.x + fb * (C.x - A.x);
+	double p2y = B.y + fb * (C.y - A.y);
+	Point arr[2] = { Point(p1x, p1y), Point(p2x, p2y) };
+	return arr;
+}
 class MouseMovement
 {
 public:
@@ -256,7 +274,8 @@ public:
 			bucket = (int)numPoints*elapsedTime;
 		}
 		// Interpolate
-		Interpolate(Storage);
+		smoothInterp(Storage);
+		//Interpolate(Storage);
 	}
 	void Save(std::string path)const
 	{
@@ -300,6 +319,11 @@ public:
 		fclose(file);
 		delete fileBuff;
 	}
+	void ChangeResolution(double factor)
+	{
+		resizeWithResolution(((double) Storage.size() / (double) pointspersecond) * factor);
+		pointspersecond *= factor;
+	}
 private:
 	/* Left and Right correspond to the part of Storage we are operating on
 	*  It should recursively divide Storage placing the pivots in output
@@ -325,7 +349,8 @@ private:
 		std::vector<Point> nStorage;
 		nStorage.resize(nSize);
 		resizeHelper(0, Storage.size(), nStorage);
-		Interpolate(nStorage);
+		smoothInterp(nStorage);
+		//Interpolate(nStorage);
 		Storage = nStorage;
 	}
 	void ClearStorage()
@@ -392,6 +417,96 @@ private:
 			last--;
 		}
 		return numCleaned + restCleaned;
+	}
+	int smoothInterp(std::vector<Point> & toInterpolate)
+	{
+		std::vector<Point> interpClone = toInterpolate;
+		int origSize = interpClone.size();
+		// push back three dummy points so we get values near the end
+		for (int i = interpClone.size() - 1; i >= 0; i--)
+		{
+			if (interpClone[i].x >= 0 && interpClone[i].y >= 0)
+			{	
+				// dirty hack: the control point generator requires points to not coincide.
+				Point toInsert = interpClone[i];
+				interpClone.push_back(toInsert);
+				toInsert.x += 0.001;
+				interpClone.push_back(toInsert);
+				toInsert.x += 0.001;
+				interpClone.push_back(toInsert);
+				break;
+			}
+		}
+
+		// for every set of 3 points, call control point helper
+		// then plug into formula based on missing numbers
+		int threes[3] = { -1, -1, -1 };
+		int tmpind = 0;
+		int ptsInd = 0;
+		while (tmpind < 3)
+		{
+			if (interpClone[ptsInd].x >= 0 && interpClone[ptsInd].y >= 0)
+			{
+				threes[tmpind] = ptsInd;
+				tmpind++;
+			}
+			ptsInd++;
+		}
+		// threes now has 3 valid points
+		while (ptsInd < interpClone.size())
+		{
+			// get control points
+			auto controls = getControlPoints(interpClone[threes[0]], interpClone[threes[1]], interpClone[threes[2]]);
+			// (threes[0] * (1-t)^3) + (3*(1-t)^2 * t * controls[0]) + (3*(1-t)*t^2 * controls[1]) + (t^3 * threes[1])
+			int segments = threes[1] - threes[0];
+			if (segments - 1 > 0)
+			{ 
+				if (interpClone[threes[0]] == interpClone[threes[1]] && interpClone[threes[1]] == interpClone[threes[2]])
+				{
+					// Can't call the control point function if the points are coincident
+					for (int k = threes[0] + 1; k != threes[1]; k++)
+					{
+						interpClone[k].x = interpClone[threes[2]].x;
+						interpClone[k].y = interpClone[threes[2]].y;
+					}
+				}
+				else
+				{
+					//fill them based off of the bezier curve given by the calculated control points
+					for (int k = threes[0] + 1; k != threes[1]; k++)
+					{
+						double t = double(k - threes[0]) / double(segments);
+						//(1 - t)3P0 + 3(1-t)2tP1 + 3(1-t)t2P2 + t3P3
+						double pX = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].x +
+							3 * (1 - t)*(1 - t)*t*controls[0].x +
+							3 * (1 - t) * t * t * controls[1].x +
+							t * t * t * interpClone[threes[1]].x;
+						double pY = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].y +
+							3 * (1 - t)*(1 - t)*t*controls[0].y +
+							3 * (1 - t) * t * t * controls[1].y +
+							t * t * t * interpClone[threes[1]].y;
+						interpClone[k].x = pX;
+						interpClone[k].y = pY;
+					}
+				}
+			}
+			// prepare for next iteration
+			threes[0] = threes[1];
+			threes[1] = threes[2];
+			while (ptsInd < interpClone.size() && interpClone[ptsInd].x < 0 && interpClone[ptsInd].y < 0)
+			{
+				ptsInd++;
+			}
+			//ptsInd is now the next valid point index
+			threes[2] = ptsInd;
+			ptsInd++;
+		}
+		// set toInterpolate to the relavent values of the clone
+		for (int j = 0; j < toInterpolate.size(); j++)
+		{
+			toInterpolate[j] = interpClone[j];
+		}
+		return 0;
 	}
 	Point generateDest(Point center, double radius)
 	{
