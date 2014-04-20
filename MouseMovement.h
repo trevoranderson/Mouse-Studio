@@ -319,9 +319,9 @@ public:
 		fclose(file);
 		delete fileBuff;
 	}
-	void ChangeResolution(double factor)
+	void ChangeResolution(double factor,double tval=0)
 	{
-		resizeWithResolution(((double) Storage.size() / (double) pointspersecond) * factor);
+		resizeWithResolution(((double) Storage.size() / (double) pointspersecond) * factor, tval);
 		pointspersecond *= factor;
 	}
 private:
@@ -342,14 +342,14 @@ private:
 		resizeHelper(left, pivot, output);
 		resizeHelper(pivot + 1, right, output);
 	}
-	void resizeWithResolution(double timeToPlay)
+	void resizeWithResolution(double timeToPlay,double tval=0)
 	{
 		// maintains resolution, but builds a new vector
 		double nSize = timeToPlay*pointspersecond;
 		std::vector<Point> nStorage;
 		nStorage.resize(nSize);
 		resizeHelper(0, Storage.size(), nStorage);
-		smoothInterp(nStorage);
+		smoothInterp(nStorage,tval);
 		//Interpolate(nStorage);
 		Storage = nStorage;
 	}
@@ -418,7 +418,7 @@ private:
 		}
 		return numCleaned + restCleaned;
 	}
-	int smoothInterp(std::vector<Point> & toInterpolate)
+	int smoothInterp(std::vector<Point> & toInterpolate,double tval=0)
 	{
 		std::vector<Point> interpClone = toInterpolate;
 		int origSize = interpClone.size();
@@ -456,7 +456,7 @@ private:
 		while (ptsInd < interpClone.size())
 		{
 			// get control points
-			auto controls = getControlPoints(interpClone[threes[0]], interpClone[threes[1]], interpClone[threes[2]]);
+			auto controls = getControlPoints(interpClone[threes[0]], interpClone[threes[1]], interpClone[threes[2]],tval);
 			// (threes[0] * (1-t)^3) + (3*(1-t)^2 * t * controls[0]) + (3*(1-t)*t^2 * controls[1]) + (t^3 * threes[1])
 			int segments = threes[1] - threes[0];
 			if (segments - 1 > 0)
