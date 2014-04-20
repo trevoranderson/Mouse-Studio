@@ -19,7 +19,7 @@ interperet the file as a mousemovement, even if it isn't.
 Recording:
 Specify an amount of time to record, possibly with a resolution in points per second.
 The resolution only stipulates the amount of storage used by the recording. The recording function will
-partially fill a vector based on the time you specify, and use linear interpolation to fill the gaps in data.
+partially fill a vector based on the time you specify, and uses a smooth bezier interpolation to fill the gaps in data.
 
 Play:
 Runs similarly to Recording, but uses SetCursorPos instead of get. Play functions do not change your underlying data.
@@ -29,3 +29,6 @@ than the original, or play it over a larger area.
 Load/Save:
 Provides an interface for saving a recorded mousemovement, or loading from files. The files can have any extension,
 it only cares about the byte data. 
+
+ChangeResolution:
+Provides a way to make a mouse-movement with low resolution look smoother by increasing the number of points per second by expanding and filling the gaps with the bezier interpolation. Also can be used to reduce the size of a mouse-movement for storing.
