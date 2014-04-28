@@ -6,6 +6,12 @@
 #include "Point.h"
 #include "Mat2.h"
 #define DISTLENGTH 10000
+template <class T> class Pair
+{
+public:
+	T first;
+	T second;
+};
 double BellRand(double width, double center)
 {
 	// Generates a random number around a given center and a distribution max length
@@ -83,8 +89,23 @@ bool operator== (Point A, Point B)
 {
 	return A.x == B.x && A.y == B.y;
 }
+Point generateDest(Point center, double radius)
+{
+	// The goal of this function is to give our move target a valid location
+	// that follows a normal distribution. radius=max radius
+	double randRadius = BellRand(radius*(double)2.0, 0);
+	if (randRadius == 0)
+	{
+		return center;
+	}
+	double theta = rand();
+	double retX = sin(theta) * randRadius + center.x;
+	double retY = cos(theta) * randRadius + center.y;
+	return Point(retX, retY);
+}
+
 //returns array size 2 POINTS CANNOT BE THE SAME
-Point * getControlPoints(Point A, Point B, Point C, double t = 0)
+Pair<Point> getControlPoints(Point A, Point B, Point C, double t = 0)
 {
 	double d01 = sqrt(pow(B.x - A.x, 2) + pow(B.y - A.y, 2));
 	double d12 = sqrt(pow(C.x - B.x, 2) + pow(C.y - B.y, 2));
@@ -94,8 +115,46 @@ Point * getControlPoints(Point A, Point B, Point C, double t = 0)
 	double p1y = B.y - fa * (C.y - A.y);
 	double p2x = B.x + fb * (C.x - A.x);
 	double p2y = B.y + fb * (C.y - A.y);
-	Point arr[2] = { Point(p1x, p1y), Point(p2x, p2y) };
-	return arr;
+	Pair<Point> ret;
+	ret.first = Point(p1x, p1y);
+	ret.second = Point(p2x, p2y);
+	return ret;
+}
+struct SetPoint
+{
+	SetPoint()
+	{
+		b = false;
+	}
+	SetPoint(Point pp, bool bb)
+	{
+		p = pp;
+		b = bb;
+	}
+	// The actual values
+	Point p;
+	// Whether or not the point has been set
+	bool b;
+};
+std::vector<Point> setPointsToPoints(const std::vector<SetPoint> & toTransform)
+{
+	std::vector<Point> points;
+	points.resize(toTransform.size());
+	for (int i = 0; i < toTransform.size(); i++)
+	{
+		points[i].x = toTransform[i].p.x;
+		points[i].y = toTransform[i].p.y;
+	}
+	return points;
+}
+void pointsToSetPoints(const std::vector<Point> & toCopy, std::vector<SetPoint> & toChange)
+{
+	for (int i = 0; i < toCopy.size(); i++)
+	{
+		toChange[i].p.x = toCopy[i].x;
+		toChange[i].p.y = toCopy[i].y;
+		toChange[i].b = true;
+	}
 }
 class MouseMovement
 {
@@ -205,16 +264,19 @@ public:
 			toPlay->pointspersecond = pointspersecond;
 			toPlay->resizeWithResolution(time_to_move);
 		}
+		// Build a lighter point vector for playing
+		std::vector<Point> points = setPointsToPoints(toPlay->Storage);
+		// Don't use Storage after this point
+		double elapsedTime = 0;
+		int numPoints = points.size();
+		int bucket = 0;
 		SYSTEMTIME start_time;
 		GetSystemTime(&start_time);
 		SYSTEMTIME now_time;
-		double elapsedTime = 0;
-		int numPoints = toPlay->Storage.size();
-		int bucket = 0;
 		while (bucket < numPoints)
 		{
 			// Apply the current bucket's action
-			SetCursorPos(toPlay->Storage[bucket].x, toPlay->Storage[bucket].y);
+			SetCursorPos(points[bucket].x, points[bucket].y);
 			// Prepare for next
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
@@ -229,12 +291,16 @@ public:
 	void PlayBetweenPoints(Point begin, Point end, double time_to_move)
 	{
 		MouseMovement toPlay(*this);
-		transformToPoints(begin, end, toPlay.Storage);
+		std::vector<Point> points = setPointsToPoints(toPlay.Storage);
+		// don't use toPlay.Storage until you re set it
+		transformToPoints(begin, end, points);
 		// Resize if the ending path length is larger than the original
 		Point vec = Point((end.x - begin.x), (end.y - begin.y));
 		double disp = sqrt(vec.x * vec.x + vec.y * vec.y);
-		Point origVec = Point((Storage[Storage.size() - 1].x - Storage[0].x), (Storage[Storage.size() - 1].y - Storage[0].y));
+		Point origVec = Point((Storage[Storage.size() - 1].p.x - Storage[0].p.x), (Storage[Storage.size() - 1].p.y - Storage[0].p.y));
 		double origDisp = sqrt(origVec.x*origVec.x + origVec.y*origVec.y);
+		// Copy points to Storage
+		pointsToSetPoints(points, toPlay.Storage);
 		if (disp / origDisp > 1)
 		{
 			toPlay.resizeWithResolution(time_to_move * (disp / origDisp));
@@ -267,7 +333,8 @@ public:
 		{
 			// Put something in the bucket
 			GetCursorPos(curserposinit);
-			Storage[bucket] = Point(curserposinit->x, curserposinit->y);
+			Storage[bucket].p = Point(curserposinit->x, curserposinit->y);
+			Storage[bucket].b = true;
 			//Calculate next bucket
 			GetSystemTime(&now_time);
 			elapsedTime = (TimeDifference(now_time, start_time)) / time_to_move;
@@ -281,11 +348,14 @@ public:
 	{
 		// copy Storage into a large char array.
 		std::ofstream file(path, std::ios::binary);
-		int StorageSize = Storage.size();
-		int bytesize = sizeof(Point)*(Storage.size()) + sizeof(pointspersecond);
+		int pointsSize = Storage.size();
+		// pare it down to just the values
+		std::vector<Point> points = setPointsToPoints(Storage);
+		// Don't use storage after this
+		int bytesize = sizeof(Point)*(points.size()) + sizeof(pointspersecond);
 		char * bytearr = new char[bytesize];
 		memcpy(bytearr, &pointspersecond, sizeof(pointspersecond));
-		memcpy(bytearr + sizeof(pointspersecond), &Storage[0], sizeof(Point)* StorageSize);
+		memcpy(bytearr + sizeof(pointspersecond), &points[0], sizeof(Point)* pointsSize);
 		file.write(bytearr, bytesize);
 		file.close();
 		delete bytearr;
@@ -313,22 +383,23 @@ public:
 		Point * ArrToCpy = (Point*)((char*)fileBuff + sizeof(pointspersecond));
 		for (int k = 0; k < StorageSize; k++)
 		{
-			Storage[k].x = ArrToCpy[k].x;
-			Storage[k].y = ArrToCpy[k].y;
+			Storage[k].p.x = ArrToCpy[k].x;
+			Storage[k].p.y = ArrToCpy[k].y;
+			Storage[k].b = true;
 		}
 		fclose(file);
 		delete fileBuff;
 	}
-	void ChangeResolution(double factor,double tval=0)
+	void ChangeResolution(double factor, double tval = 0)
 	{
-		resizeWithResolution(((double) Storage.size() / (double) pointspersecond) * factor, tval);
+		resizeWithResolution(((double)Storage.size() / (double)pointspersecond) * factor, tval);
 		pointspersecond *= factor;
 	}
 private:
 	/* Left and Right correspond to the part of Storage we are operating on
 	*  It should recursively divide Storage placing the pivots in output
 	*/
-	void resizeHelper(int left, int right, std::vector<Point> &output)
+	void resizeHelper(int left, int right, std::vector<SetPoint> &output)
 	{ //Right should be out of range by one for intuitive iteration
 		if (right - left <= 0)
 		{
@@ -336,20 +407,21 @@ private:
 		}
 		int pivot = (right + left) / 2;
 		int outInd = ((double)pivot / Storage.size())* output.size();
-		output[outInd].x = Storage[pivot].x;
-		output[outInd].y = Storage[pivot].y;
+		output[outInd].p.x = Storage[pivot].p.x;
+		output[outInd].p.y = Storage[pivot].p.y;
+		output[outInd].b = true;
 		// Divide into left and right sides
 		resizeHelper(left, pivot, output);
 		resizeHelper(pivot + 1, right, output);
 	}
-	void resizeWithResolution(double timeToPlay,double tval=0)
+	void resizeWithResolution(double timeToPlay, double tval = 0)
 	{
 		// maintains resolution, but builds a new vector
 		double nSize = timeToPlay*pointspersecond;
-		std::vector<Point> nStorage;
+		std::vector<SetPoint> nStorage;
 		nStorage.resize(nSize);
 		resizeHelper(0, Storage.size(), nStorage);
-		smoothInterp(nStorage,tval);
+		smoothInterp(nStorage, tval);
 		//Interpolate(nStorage);
 		Storage = nStorage;
 	}
@@ -357,10 +429,11 @@ private:
 	{
 		for (auto &i : Storage)
 		{
-			i.x = -1;
-			i.y = -1;
+			// only need to flag it as unset
+			i.b = false;
 		}
 	}
+	// unused function: delete later
 	int Interpolate(std::vector<Point> & toInterpolate)
 	{
 		int numCleaned = 0;
@@ -418,26 +491,41 @@ private:
 		}
 		return numCleaned + restCleaned;
 	}
-	int smoothInterp(std::vector<Point> & toInterpolate,double tval=0)
+	int smoothInterp(std::vector<SetPoint> & toInterpolate, double tval = 0)
 	{
-		std::vector<Point> interpClone = toInterpolate;
+		std::vector<SetPoint> interpClone = toInterpolate;
 		int origSize = interpClone.size();
+		const int prePoints = 3;
 		// push back three dummy points so we get values near the end
 		for (int i = interpClone.size() - 1; i >= 0; i--)
 		{
-			if (interpClone[i].x >= 0 && interpClone[i].y >= 0)
-			{	
+			if (interpClone[i].b)
+			{
 				// dirty hack: the control point generator requires points to not coincide.
-				Point toInsert = interpClone[i];
+				SetPoint toInsert = interpClone[i];;
 				interpClone.push_back(toInsert);
-				toInsert.x += 0.001;
+				toInsert.p.x += 0.001;
 				interpClone.push_back(toInsert);
-				toInsert.x += 0.001;
+				toInsert.p.x += 0.001;
 				interpClone.push_back(toInsert);
 				break;
 			}
 		}
-
+		// insert a couple dummies to the front as well, to provide a default threes that works
+		for (int i = 0; i < interpClone.size(); i++)
+		{
+			if (interpClone[i].b)
+			{
+				// dirty hack: the control point generator requires points to not coincide.
+				SetPoint toInsert = interpClone[i];
+				interpClone.insert(interpClone.begin(), toInsert);
+				toInsert.p.x += 0.01;
+				interpClone.insert(interpClone.begin(), toInsert);
+				toInsert.p.x += 0.01;
+				interpClone.insert(interpClone.begin(), toInsert);
+				break;
+			}
+		}
 		// for every set of 3 points, call control point helper
 		// then plug into formula based on missing numbers
 		int threes[3] = { -1, -1, -1 };
@@ -445,7 +533,7 @@ private:
 		int ptsInd = 0;
 		while (tmpind < 3)
 		{
-			if (interpClone[ptsInd].x >= 0 && interpClone[ptsInd].y >= 0)
+			if (interpClone[ptsInd].b)
 			{
 				threes[tmpind] = ptsInd;
 				tmpind++;
@@ -456,18 +544,20 @@ private:
 		while (ptsInd < interpClone.size())
 		{
 			// get control points
-			auto controls = getControlPoints(interpClone[threes[0]], interpClone[threes[1]], interpClone[threes[2]],tval);
-			// (threes[0] * (1-t)^3) + (3*(1-t)^2 * t * controls[0]) + (3*(1-t)*t^2 * controls[1]) + (t^3 * threes[1])
+			auto controls = getControlPoints(interpClone[threes[0]].p, interpClone[threes[1]].p, interpClone[threes[2]].p, tval);
+			// (threes[0] * (1-t)^3) + (3*(1-t)^2 * t * controls.first) + (3*(1-t)*t^2 * controls.second) + (t^3 * threes[1])
 			int segments = threes[1] - threes[0];
 			if (segments - 1 > 0)
-			{ 
-				if (interpClone[threes[0]] == interpClone[threes[1]] && interpClone[threes[1]] == interpClone[threes[2]])
+			{
+
+				if (interpClone[threes[0]].p == interpClone[threes[1]].p && interpClone[threes[0]].p == interpClone[threes[2]].p)
 				{
 					// Can't call the control point function if the points are coincident
 					for (int k = threes[0] + 1; k != threes[1]; k++)
 					{
-						interpClone[k].x = interpClone[threes[2]].x;
-						interpClone[k].y = interpClone[threes[2]].y;
+						interpClone[k].p.x = interpClone[threes[2]].p.x;
+						interpClone[k].p.y = interpClone[threes[2]].p.y;
+						interpClone[k].b = true;
 					}
 				}
 				else
@@ -477,23 +567,24 @@ private:
 					{
 						double t = double(k - threes[0]) / double(segments);
 						//(1 - t)3P0 + 3(1-t)2tP1 + 3(1-t)t2P2 + t3P3
-						double pX = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].x +
-							3 * (1 - t)*(1 - t)*t*controls[0].x +
-							3 * (1 - t) * t * t * controls[1].x +
-							t * t * t * interpClone[threes[1]].x;
-						double pY = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].y +
-							3 * (1 - t)*(1 - t)*t*controls[0].y +
-							3 * (1 - t) * t * t * controls[1].y +
-							t * t * t * interpClone[threes[1]].y;
-						interpClone[k].x = pX;
-						interpClone[k].y = pY;
+						double pX = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].p.x +
+							3 * (1 - t)*(1 - t)*t*controls.first.x +
+							3 * (1 - t) * t * t * controls.second.x +
+							t * t * t * interpClone[threes[1]].p.x;
+						double pY = (1 - t)*(1 - t)*(1 - t) * interpClone[threes[0]].p.y +
+							3 * (1 - t)*(1 - t)*t*controls.first.y +
+							3 * (1 - t) * t * t * controls.second.y +
+							t * t * t * interpClone[threes[1]].p.y;
+						interpClone[k].p.x = pX;
+						interpClone[k].p.y = pY;
+						interpClone[k].b = true;
 					}
 				}
 			}
 			// prepare for next iteration
 			threes[0] = threes[1];
 			threes[1] = threes[2];
-			while (ptsInd < interpClone.size() && interpClone[ptsInd].x < 0 && interpClone[ptsInd].y < 0)
+			while (ptsInd < interpClone.size() && !interpClone[ptsInd].b)
 			{
 				ptsInd++;
 			}
@@ -502,27 +593,14 @@ private:
 			ptsInd++;
 		}
 		// set toInterpolate to the relavent values of the clone
+		// toInterpolate will be larger, but it doesn't matter since we copy off of the other's size
 		for (int j = 0; j < toInterpolate.size(); j++)
 		{
-			toInterpolate[j] = interpClone[j];
+			toInterpolate[j] = interpClone[j + prePoints];
 		}
 		return 0;
 	}
-	Point generateDest(Point center, double radius)
-	{
-		// The goal of this function is to give our move target a valid location
-		// that follows a normal distribution. radius=max radius
-		double randRadius = BellRand(radius*(double)2.0, 0);
-		if (randRadius == 0)
-		{
-			return center;
-		}
-		double theta = rand();
-		double retX = sin(theta) * randRadius + center.x;
-		double retY = cos(theta) * randRadius + center.y;
-		return Point(retX, retY);
-	}
 	// Holds all the structs.
-	std::vector<Point> Storage;
+	std::vector<SetPoint> Storage;
 	unsigned int pointspersecond;
 };

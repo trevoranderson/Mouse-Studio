@@ -2,7 +2,9 @@
 class Point
 {
 public:
-	Point(double first = -1, double second = -1)
+	Point()
+	{}
+	Point(double first, double second)
 	{
 		x = first;
 		y = second;
