@@ -5,6 +5,7 @@
 #include <Windows.h>
 #include "Point.h"
 #include "Mat2.h"
+// the (arbitrary) length of a normalized path
 #define DISTLENGTH 10000
 template <class T> class Pair
 {
@@ -149,6 +150,10 @@ std::vector<Point> setPointsToPoints(const std::vector<SetPoint> & toTransform)
 }
 void pointsToSetPoints(const std::vector<Point> & toCopy, std::vector<SetPoint> & toChange)
 {
+	if (toCopy.size() != toChange.size())
+	{
+		toChange.resize(toCopy.size());
+	}
 	for (int i = 0; i < toCopy.size(); i++)
 	{
 		toChange[i].p.x = toCopy[i].x;
@@ -307,6 +312,21 @@ public:
 			toPlay.pointspersecond *= (disp / origDisp);
 		}
 		toPlay.Play(time_to_move);
+	}
+	// Left and Right are fractional values denoting how much should be played
+	void PlayBetweenPoints(Point begin, Point end, double time_to_move, double left, double right)
+	{
+		if (right < left || left < 0 || right > 1)
+		{
+			return; // Impossible to play like that
+		}
+		int effectiveLeft = left * Storage.size();
+		int effectiveRight = right * Storage.size();
+		MouseMovement toPlay(*this);
+		std::vector<Point> tmp = setPointsToPoints(toPlay.Storage);
+		std::vector<Point> points(tmp.begin() + effectiveLeft, tmp.begin() + effectiveRight);
+		pointsToSetPoints(points, toPlay.Storage);
+		toPlay.PlayBetweenPoints(begin, end, time_to_move);
 	}
 	void Record(double time_to_move, int resolutionpps = 3000)
 	{
